@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Teacher Chat</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;display:flex;height:100vh;background:#f5f5f7}
+  #side{width:240px;background:#fff;border-right:1px solid #ddd;padding:12px;overflow:auto}
+  #side button{width:100%;margin-bottom:6px;text-align:left}
+  #main{flex:1;display:flex;flex-direction:column}
+  #log{flex:1;overflow:auto;padding:16px}
+  .m{max-width:75%;padding:10px 14px;margin:8px 0;border-radius:12px;white-space:pre-wrap}
+  .user{background:#2563eb;color:#fff;margin-left:auto}
+  .assistant{background:#fff;border:1px solid #ddd}
+  form{display:flex;gap:8px;padding:12px;background:#fff;border-top:1px solid #ddd}
+  input{flex:1;padding:10px;font-size:15px}
+  @media(max-width:600px){#side{display:none}}
+</style>
+</head>
+<body>
+<div id="side"><button id="new">+ New chat</button><div id="list"></div></div>
+<div id="main">
+  <div id="log"></div>
+  <form id="f"><input id="q" placeholder="Ask your teacher anything..." autocomplete="off"><button>Send</button></form>
+</div>
+<script>
+let convId = null;
+const log = document.getElementById('log');
+const add = (role, text) => {
+  const d = document.createElement('div');
+  d.className = 'm ' + role; d.textContent = text;
+  log.appendChild(d); log.scrollTop = log.scrollHeight; return d;
+};
+async function loadList() {
+  const rows = await (await fetch('/conversations')).json();
+  const list = document.getElementById('list'); list.innerHTML = '';
+  rows.forEach(r => {
+    const b = document.createElement('button');
+    b.textContent = r.title; b.onclick = () => openConv(r.id);
+    list.appendChild(b);
+  });
+}
+async function openConv(id) {
+  convId = id; log.innerHTML = '';
+  (await (await fetch('/conversations/' + id)).json()).forEach(m => add(m.role, m.content));
+}
+document.getElementById('new').onclick = () => { convId = null; log.innerHTML = ''; };
+document.getElementById('f').onsubmit = async e => {
+  e.preventDefault();
+  const q = document.getElementById('q'); const text = q.value.trim();
+  if (!text) return; q.value = '';
+  add('user', text);
+  const wait = add('assistant', 'Thinking...');
+  try {
+    const r = await fetch('/chat', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({message: text, conversation_id: convId})});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    convId = data.conversation_id; wait.textContent = data.reply; loadList();
+  } catch (err) { wait.textContent = 'Error: ' + err.message; }
+};
+loadList();
+</script>
+</body>
+</html>
